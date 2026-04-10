@@ -1,0 +1,2070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A minimalist spaced-repetition scheduler for LeetCode interview preparation, powered by the FSRS algorithm." />
+  <title>LeetCode SRS — Spaced Repetition Scheduler</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ═══════════════════════════════════════════════════
+       DESIGN SYSTEM — Tokens
+    ═══════════════════════════════════════════════════ */
+    :root {
+      /* Surface palette */
+      --bg-deep:    #07080d;
+      --bg-base:    #0d0f17;
+      --bg-raised:  #141724;
+      --bg-overlay: #1a1e30;
+      --bg-glass:   rgba(22, 27, 48, 0.65);
+      --border:     rgba(255,255,255,0.06);
+      --border-lit: rgba(255,255,255,0.12);
+
+      /* Accent palette */
+      --accent:       #6c63ff;
+      --accent-light: #a29bfe;
+      --accent-glow:  rgba(108, 99, 255, 0.35);
+      --green:        #00e676;
+      --green-dim:    rgba(0,230,118,0.12);
+      --red:          #ff5252;
+      --red-dim:      rgba(255,82,82,0.12);
+      --amber:        #ffab40;
+      --amber-dim:    rgba(255,171,64,0.12);
+
+      /* Text */
+      --text-primary:   #e8eaf6;
+      --text-secondary: #9298b8;
+      --text-muted:     #5c6180;
+
+      /* Typography */
+      --font-sans:  'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono:  'JetBrains Mono', 'Fira Code', monospace;
+
+      /* Spacing */
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+
+      /* Shadows */
+      --shadow-card: 0 4px 24px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.2);
+      --shadow-modal: 0 24px 80px rgba(0,0,0,0.6), 0 8px 32px rgba(0,0,0,0.4);
+      --shadow-glow: 0 0 32px var(--accent-glow);
+    }
+
+    /* ═══════════════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Animated gradient orbs */
+    body::before, body::after {
+      content: '';
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.3;
+      z-index: 0;
+      pointer-events: none;
+    }
+    body::before {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+      top: -200px; left: -100px;
+      animation: orb-drift 18s ease-in-out infinite alternate;
+    }
+    body::after {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, #6c63ff44 0%, transparent 70%);
+      bottom: -150px; right: -80px;
+      animation: orb-drift 22s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes orb-drift {
+      0%   { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(60px, 40px) scale(1.15); }
+    }
+
+    /* ═══════════════════════════════════════════════════
+       LAYOUT — App Shell
+    ═══════════════════════════════════════════════════ */
+    #app {
+      position: relative;
+      z-index: 1;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+    }
+
+    /* ── HEADER ─────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 40px;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), #a29bfe);
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 800;
+      color: #fff;
+      box-shadow: var(--shadow-glow);
+    }
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+    }
+    .header h1 span {
+      font-weight: 400;
+      -webkit-text-fill-color: var(--text-secondary);
+    }
+
+    /* ── HEADER ACTIONS ─────────────────────────────── */
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #btn-add-problem {
+      display: flex; align-items: center; gap: 8px;
+      border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), #8b83ff);
+      color: #fff;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 11px 22px;
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-glow);
+      transition: transform 0.2s, box-shadow 0.2s;
+      letter-spacing: 0.3px;
+    }
+    #btn-add-problem:hover {
+      transform: translateY(-2px) scale(1.03);
+      box-shadow: 0 0 48px var(--accent-glow);
+    }
+    #btn-add-problem:active { transform: scale(0.97); }
+    #btn-add-problem svg { width: 18px; height: 18px; }
+
+    .btn-io {
+      display: flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border-lit);
+      cursor: pointer;
+      background: var(--bg-glass);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-weight: 500;
+      font-size: 0.78rem;
+      padding: 9px 16px;
+      border-radius: var(--radius-xl);
+      transition: all 0.2s;
+      letter-spacing: 0.3px;
+    }
+    .btn-io:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+      transform: translateY(-1px);
+      background: rgba(108,99,255,0.08);
+    }
+    .btn-io:active { transform: scale(0.97); }
+    .btn-io svg { width: 15px; height: 15px; }
+
+    /* ── STATS BAR ─────────────────────────────────── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+    .stat-card {
+      background: var(--bg-glass);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 18px 16px;
+      text-align: center;
+      transition: border-color 0.25s, transform 0.2s;
+    }
+    .stat-card:hover {
+      border-color: var(--border-lit);
+      transform: translateY(-2px);
+    }
+    .stat-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      background: linear-gradient(135deg, var(--text-primary), var(--accent-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── SECTION ────────────────────────────────────── */
+    .section { margin-bottom: 40px; }
+    .section-title {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      padding-left: 4px;
+    }
+    .section-title .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .section-title .dot.live   { background: var(--green); box-shadow: 0 0 10px var(--green); }
+    .section-title .dot.future { background: var(--accent); }
+
+    .section-count {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+    }
+
+    /* ── TASK CARD ──────────────────────────────────── */
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .task-card {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 16px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      transition: border-color 0.25s, transform 0.2s, background 0.25s;
+      animation: card-in 0.35s ease-out both;
+    }
+    .task-card:hover {
+      border-color: var(--border-lit);
+      background: rgba(22, 27, 48, 0.85);
+      transform: translateY(-1px);
+    }
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .task-num {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 1.05rem;
+      color: var(--accent-light);
+      min-width: 64px;
+    }
+    .task-num a {
+      color: inherit;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .task-num a:hover { color: #fff; }
+
+    .task-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .task-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+    .task-meta .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 500;
+    }
+    .badge.time-badge   { background: var(--amber-dim); color: var(--amber); }
+    .badge.due-badge     { background: rgba(108,99,255,0.12); color: var(--accent-light); }
+    .badge.streak-badge  { background: var(--green-dim); color: var(--green); }
+    .badge.fail-badge    { background: var(--red-dim); color: var(--red); }
+    .badge.stability-badge { background: rgba(255,255,255,0.05); color: var(--text-secondary); }
+
+    .task-scheduled-time {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .task-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-update, .btn-delete {
+      border: none; cursor: pointer;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 0.78rem;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      transition: all 0.2s;
+    }
+    .btn-update {
+      background: rgba(108,99,255,0.15);
+      color: var(--accent-light);
+      border: 1px solid rgba(108,99,255,0.25);
+    }
+    .btn-update:hover {
+      background: rgba(108,99,255,0.3);
+      transform: translateY(-1px);
+    }
+    .btn-delete {
+      background: rgba(255,82,82,0.08);
+      color: var(--red);
+      border: 1px solid rgba(255,82,82,0.15);
+      padding: 8px 10px;
+    }
+    .btn-delete:hover {
+      background: rgba(255,82,82,0.2);
+    }
+
+    /* ── EMPTY STATE ───────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+    .empty-state p {
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       MODAL
+    ═══════════════════════════════════════════════════ */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 5, 10, 0.8);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s, visibility 0.3s;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+    .modal {
+      background: var(--bg-raised);
+      border: 1px solid var(--border-lit);
+      border-radius: var(--radius-lg);
+      padding: 36px 32px 28px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: var(--shadow-modal);
+      transform: translateY(24px) scale(0.96);
+      transition: transform 0.35s cubic-bezier(0.16,1,0.3,1);
+    }
+    .modal-overlay.active .modal {
+      transform: translateY(0) scale(1);
+    }
+    .modal-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .modal-title .modal-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .modal-title .modal-icon.add { background: var(--green-dim); }
+    .modal-title .modal-icon.update { background: rgba(108,99,255,0.15); }
+
+    /* Form controls */
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="number"] {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border-lit);
+      border-radius: var(--radius-sm);
+      padding: 13px 16px;
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .form-group input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .time-inputs {
+      display: flex;
+      gap: 10px;
+    }
+    .time-inputs .form-group { flex: 1; }
+
+    /* Toggle */
+    .toggle-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .toggle-btn {
+      flex: 1;
+      border: 1px solid var(--border-lit);
+      background: var(--bg-base);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .toggle-btn:hover {
+      border-color: var(--border-lit);
+      color: var(--text-primary);
+    }
+    .toggle-btn.active-solved {
+      background: var(--green-dim);
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .toggle-btn.active-failed {
+      background: var(--red-dim);
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    /* Submit */
+    .btn-submit {
+      width: 100%;
+      border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), #8b83ff);
+      color: #fff;
+      font-family: var(--font-sans);
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 14px;
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-glow);
+      transition: transform 0.2s, box-shadow 0.2s;
+      letter-spacing: 0.4px;
+    }
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 48px var(--accent-glow);
+    }
+    .btn-submit:active { transform: scale(0.98); }
+    .btn-submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-cancel {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-weight: 500;
+      font-size: 0.85rem;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      margin-top: 10px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-cancel:hover {
+      border-color: var(--border-lit);
+      color: var(--text-primary);
+    }
+
+    .form-note {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── TOAST ──────────────────────────────────────── */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      background: var(--bg-raised);
+      border: 1px solid var(--border-lit);
+      border-radius: var(--radius-sm);
+      padding: 14px 20px;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      box-shadow: var(--shadow-card);
+      animation: toast-in 0.35s ease-out, toast-out 0.3s 2.5s ease-in forwards;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    @keyframes toast-in  { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toast-out { to   { opacity: 0; transform: translateY(16px); } }
+
+    /* ── FILE STATUS BAR ────────────────────────────── */
+    .file-status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-glass);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 16px;
+      margin-bottom: 20px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      transition: border-color 0.25s;
+    }
+    .file-status-bar:hover { border-color: var(--border-lit); }
+    .file-status-bar .file-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .file-status-bar .file-name {
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .file-status-bar .file-sync {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .file-status-bar .sync-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    .file-status-bar .sync-dot.unsaved {
+      background: var(--amber);
+      box-shadow: 0 0 6px var(--amber);
+    }
+    .file-status-bar .sync-dot.disconnected {
+      background: var(--text-muted);
+      box-shadow: none;
+      animation: none;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .btn-file-connect {
+      border: 1px solid var(--border-lit);
+      background: rgba(108,99,255,0.1);
+      color: var(--accent-light);
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 0.72rem;
+      padding: 5px 14px;
+      border-radius: var(--radius-xl);
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.3px;
+    }
+    .btn-file-connect:hover {
+      background: rgba(108,99,255,0.2);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .btn-file-disconnect {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-weight: 500;
+      font-size: 0.72rem;
+      padding: 5px 10px;
+      border-radius: var(--radius-xl);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-file-disconnect:hover {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    /* ── IMPORT OPTIONS ────────────────────────────── */
+    .import-options {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .import-option {
+      flex: 1;
+      background: var(--bg-base);
+      border: 1px solid var(--border-lit);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+      font-family: var(--font-sans);
+    }
+    .import-option:hover {
+      border-color: var(--accent);
+      background: rgba(108,99,255,0.06);
+    }
+    .import-option.selected {
+      border-color: var(--accent);
+      background: rgba(108,99,255,0.12);
+    }
+    .import-option .import-icon {
+      font-size: 1.3rem;
+      margin-bottom: 6px;
+    }
+    .import-option .import-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .import-option .import-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border-lit);
+      border-radius: var(--radius-md);
+      padding: 32px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.25s;
+      margin-bottom: 20px;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(108,99,255,0.06);
+      color: var(--text-secondary);
+    }
+    .drop-zone .drop-icon {
+      font-size: 2rem;
+      margin-bottom: 8px;
+      opacity: 0.6;
+    }
+    .drop-zone .drop-text {
+      font-weight: 500;
+    }
+    .drop-zone .drop-sub {
+      font-size: 0.72rem;
+      margin-top: 4px;
+    }
+    .drop-zone .file-selected {
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+
+    /* ── RESPONSIVE ─────────────────────────────────── */
+    @media (max-width: 640px) {
+      .stats-bar { grid-template-columns: repeat(2, 1fr); }
+      .task-card { grid-template-columns: 1fr; gap: 10px; }
+      .task-actions { justify-content: flex-end; }
+      .header { flex-direction: column; gap: 16px; align-items: flex-start; }
+      .header-actions { width: 100%; flex-wrap: wrap; }
+      #btn-add-problem { flex: 1; justify-content: center; }
+      .btn-io { flex: 1; justify-content: center; }
+      .import-options { flex-direction: column; }
+    }
+
+    /* ── CONFIRM DIALOG ─────────────────────────────── */
+    .confirm-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .confirm-actions button {
+      flex: 1;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      transition: all 0.2s;
+    }
+    .confirm-actions .btn-confirm-delete {
+      background: var(--red-dim);
+      border: 1px solid var(--red);
+      color: var(--red);
+    }
+    .confirm-actions .btn-confirm-delete:hover { background: rgba(255,82,82,0.25); }
+    .confirm-actions .btn-confirm-cancel {
+      background: var(--bg-base);
+      border: 1px solid var(--border-lit);
+      color: var(--text-secondary);
+    }
+    .confirm-actions .btn-confirm-cancel:hover { color: var(--text-primary); }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-icon">LC</div>
+      <h1>LeetCode <span>SRS</span></h1>
+    </div>
+    <div class="header-actions">
+      <button id="btn-add-problem" aria-label="Add a new problem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Problem
+      </button>
+      <button class="btn-io" id="btn-export" aria-label="Export data to JSON file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+      <button class="btn-io" id="btn-import" aria-label="Import data from JSON file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import
+      </button>
+    </div>
+  </header>
+
+  <!-- STATS -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-value" id="stat-due">0</div>
+      <div class="stat-label">Due Today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-total">0</div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-mastered">0</div>
+      <div class="stat-label">Mastered</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-streak">0</div>
+      <div class="stat-label">Best Streak</div>
+    </div>
+  </div>
+
+  <!-- FILE STATUS -->
+  <div class="file-status-bar" id="file-status-bar">
+    <div class="file-info">
+      <span class="file-sync"><span class="sync-dot disconnected" id="sync-dot"></span> <span id="sync-label">No file connected</span></span>
+      <span class="file-name" id="file-status-name"></span>
+    </div>
+    <div>
+      <button class="btn-file-connect" id="btn-file-connect" title="Pick a JSON file to auto-save to">Connect File</button>
+      <button class="btn-file-disconnect" id="btn-file-disconnect" title="Disconnect file" style="display:none">✕</button>
+    </div>
+  </div>
+
+  <!-- TODAY'S TASKS -->
+  <section class="section" id="section-today">
+    <div class="section-title">
+      <span class="dot live"></span>
+      Today's Tasks
+      <span class="section-count" id="today-count"></span>
+    </div>
+    <div class="task-list" id="today-tasks"></div>
+  </section>
+
+  <!-- UPCOMING -->
+  <section class="section" id="section-upcoming">
+    <div class="section-title">
+      <span class="dot future"></span>
+      Upcoming
+      <span class="section-count" id="upcoming-count"></span>
+    </div>
+    <div class="task-list" id="upcoming-tasks"></div>
+  </section>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Add Problem
+═══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-add">
+  <div class="modal" role="dialog" aria-labelledby="modal-add-title">
+    <div class="modal-title">
+      <div class="modal-icon add">➕</div>
+      <span id="modal-add-title">Add New Problem</span>
+    </div>
+    <form id="form-add" autocomplete="off">
+      <div class="form-group">
+        <label for="input-problem">Problem # or URL</label>
+        <input type="text" id="input-problem" placeholder="e.g.  1 or  https://leetcode.com/problems/two-sum" required />
+        <div class="form-note">Enter a LeetCode problem number or full URL</div>
+      </div>
+      <div class="toggle-group" id="toggle-status-add">
+        <button type="button" class="toggle-btn active-solved" data-status="solved" id="toggle-solved-add">✓ Solved</button>
+        <button type="button" class="toggle-btn" data-status="failed" id="toggle-failed-add">✗ Failed</button>
+      </div>
+      <div id="time-section-add">
+        <div class="time-inputs">
+          <div class="form-group">
+            <label for="input-minutes">Minutes</label>
+            <input type="number" id="input-minutes" placeholder="0" min="0" max="999" />
+          </div>
+          <div class="form-group">
+            <label for="input-seconds">Seconds</label>
+            <input type="number" id="input-seconds" placeholder="0" min="0" max="59" />
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn-submit" id="btn-submit-add">Schedule Problem</button>
+      <button type="button" class="btn-cancel" id="btn-cancel-add">Cancel</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Update Problem
+═══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-update">
+  <div class="modal" role="dialog" aria-labelledby="modal-update-title">
+    <div class="modal-title">
+      <div class="modal-icon update">🔄</div>
+      <span id="modal-update-title">Update Problem</span>
+    </div>
+    <form id="form-update" autocomplete="off">
+      <input type="hidden" id="update-id" />
+      <div class="form-group">
+        <label>Problem</label>
+        <div id="update-problem-display" style="font-family:var(--font-mono);font-size:1.05rem;color:var(--accent-light);padding:8px 0;"></div>
+      </div>
+      <div class="toggle-group" id="toggle-status-update">
+        <button type="button" class="toggle-btn active-solved" data-status="solved" id="toggle-solved-update">✓ Solved</button>
+        <button type="button" class="toggle-btn" data-status="failed" id="toggle-failed-update">✗ Failed</button>
+      </div>
+      <div id="time-section-update">
+        <div class="time-inputs">
+          <div class="form-group">
+            <label for="update-minutes">Minutes</label>
+            <input type="number" id="update-minutes" placeholder="0" min="0" max="999" />
+          </div>
+          <div class="form-group">
+            <label for="update-seconds">Seconds</label>
+            <input type="number" id="update-seconds" placeholder="0" min="0" max="59" />
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn-submit" id="btn-submit-update">Reschedule</button>
+      <button type="button" class="btn-cancel" id="btn-cancel-update">Cancel</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Confirm Delete
+═══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-delete">
+  <div class="modal" role="dialog" aria-labelledby="modal-delete-title">
+    <div class="modal-title">
+      <span id="modal-delete-title">Delete Problem?</span>
+    </div>
+    <p style="color:var(--text-secondary);font-size:0.9rem;line-height:1.5;">This will permanently remove the problem and all its review history. This action cannot be undone.</p>
+    <input type="hidden" id="delete-id" />
+    <div class="confirm-actions">
+      <button class="btn-confirm-cancel" id="btn-confirm-cancel-delete">Keep It</button>
+      <button class="btn-confirm-delete" id="btn-confirm-delete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Import
+═══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-import">
+  <div class="modal" role="dialog" aria-labelledby="modal-import-title">
+    <div class="modal-title">
+      <div class="modal-icon add">📂</div>
+      <span id="modal-import-title">Import from JSON</span>
+    </div>
+    <div class="drop-zone" id="drop-zone">
+      <div class="drop-icon">📄</div>
+      <div class="drop-text">Drop a JSON file here or click to browse</div>
+      <div class="drop-sub">Accepts .json files exported from this app</div>
+    </div>
+    <input type="file" id="file-input" accept=".json" style="display:none" />
+    <div class="import-options">
+      <div class="import-option selected" data-mode="replace" id="import-mode-replace">
+        <div class="import-icon">🔄</div>
+        <div class="import-label">Replace</div>
+        <div class="import-desc">Overwrite all current data</div>
+      </div>
+      <div class="import-option" data-mode="merge" id="import-mode-merge">
+        <div class="import-icon">🔀</div>
+        <div class="import-label">Merge</div>
+        <div class="import-desc">Add new, skip duplicates</div>
+      </div>
+    </div>
+    <button class="btn-submit" id="btn-submit-import" disabled>Import Data</button>
+    <button class="btn-cancel" id="btn-cancel-import">Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: File Choice (Open existing vs Create new)
+═══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-file-choice">
+  <div class="modal" role="dialog" aria-labelledby="modal-file-choice-title">
+    <div class="modal-title">
+      <div class="modal-icon add">🔗</div>
+      <span id="modal-file-choice-title">Connect a JSON File</span>
+    </div>
+    <p style="color:var(--text-secondary);font-size:0.85rem;line-height:1.6;margin-bottom:20px;">
+      Choose a JSON file to auto-save your data to. Every change will be written to this file automatically.
+    </p>
+    <div class="import-options">
+      <div class="import-option" id="btn-file-open-existing" style="cursor:pointer">
+        <div class="import-icon">📂</div>
+        <div class="import-label">Open Existing</div>
+        <div class="import-desc">Load data from an existing JSON file</div>
+      </div>
+      <div class="import-option" id="btn-file-create-new" style="cursor:pointer">
+        <div class="import-icon">✨</div>
+        <div class="import-label">Create New</div>
+        <div class="import-desc">Save current data to a new file</div>
+      </div>
+    </div>
+    <button class="btn-cancel" id="btn-cancel-file-choice">Cancel</button>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     JAVASCRIPT — FSRS-4.5 Engine + App Logic
+═══════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ─── FSRS-4.5 ALGORITHM ──────────────────────────
+     Implements the FSRS-4.5 algorithm from
+     open-spaced-repetition/fsrs4anki.
+
+     Memory state: Stability (S) and Difficulty (D).
+     Grades: 1=Again, 2=Hard, 3=Good, 4=Easy.
+     Desired Retention: 0.9 (90%).
+  ──────────────────────────────────────────────────── */
+
+  // FSRS-4.5 default parameters (17 weights)
+  const W = [
+    0.4872,  // w0  – S0(Again)
+    1.4003,  // w1  – S0(Hard)
+    3.7145,  // w2  – S0(Good)
+    13.8206, // w3  – S0(Easy)
+    5.1618,  // w4  – D0(G) offset
+    1.2298,  // w5  – D0(G) grade factor
+    0.8975,  // w6  – difficulty update grade factor
+    0.031,   // w7  – mean reversion weight
+    1.6474,  // w8  – SInc: exp base
+    0.1367,  // w9  – SInc: stability decay
+    1.0461,  // w10 – SInc: retrievability factor
+    2.1072,  // w11 – Sf: base
+    0.0793,  // w12 – Sf: difficulty power
+    0.3246,  // w13 – Sf: stability power
+    1.587,   // w14 – Sf: retrievability factor
+    0.2272,  // w15 – hard multiplier
+    2.8755   // w16 – easy multiplier
+  ];
+
+  const DECAY  = -0.5;
+  const FACTOR = 19 / 81; // ensures R(S,S)=0.9
+
+  const DESIRED_RETENTION = 0.9;
+
+  /** Clamp a value between min and max */
+  function clamp(val, min, max) {
+    return Math.max(min, Math.min(max, val));
+  }
+
+  /** Initial stability for the first rating
+   *  S0(G) = w[G-1]
+   */
+  function initialStability(grade) {
+    return Math.max(0.1, W[grade - 1]);
+  }
+
+  /** Initial difficulty for the first rating
+   *  D0(G) = w4 - e^(w5 * (G-1)) + 1
+   *  (FSRS-5 formula for initial difficulty)
+   */
+  function initialDifficulty(grade) {
+    return clamp(W[4] - Math.exp(W[5] * (grade - 1)) + 1, 1, 10);
+  }
+
+  /** Update difficulty after a review
+   *  ΔD(G) = -w6 * (G - 3)
+   *  D' = D + ΔD * (10 - D) / 9  (linear damping)
+   *  D'' = w7 * D0(4) + (1 - w7) * D'  (mean reversion)
+   */
+  function nextDifficulty(d, grade) {
+    const deltaD = -W[6] * (grade - 3);
+    const dPrime = d + deltaD * (10 - d) / 9;
+    const d0_4 = clamp(W[4] - Math.exp(W[5] * (4 - 1)) + 1, 1, 10);
+    return clamp(W[7] * d0_4 + (1 - W[7]) * dPrime, 1, 10);
+  }
+
+  /** Retrievability after t days since last review
+   *  R(t,S) = (1 + FACTOR * t/S)^DECAY
+   */
+  function retrievability(t, s) {
+    return Math.pow(1 + FACTOR * t / s, DECAY);
+  }
+
+  /** Next interval given desired retention and stability
+   *  I(r,S) = (S/FACTOR) * (r^(1/DECAY) - 1)
+   */
+  function nextInterval(s, r) {
+    if (r <= 0 || r >= 1) r = DESIRED_RETENTION;
+    return Math.max(1, Math.round((s / FACTOR) * (Math.pow(r, 1 / DECAY) - 1)));
+  }
+
+  /** Stability after successful recall
+   *  S'_r(D,S,R,G) = S * (e^w8 * (11-D) * S^-w9 * (e^(w10*(1-R))-1)
+   *                   * w15(if Hard) * w16(if Easy) + 1)
+   */
+  function stabilityAfterRecall(d, s, r, grade) {
+    let sInc = Math.exp(W[8])
+             * (11 - d)
+             * Math.pow(s, -W[9])
+             * (Math.exp(W[10] * (1 - r)) - 1);
+
+    if (grade === 2) sInc *= W[15]; // Hard
+    if (grade === 4) sInc *= W[16]; // Easy
+
+    return Math.max(0.1, s * (sInc + 1));
+  }
+
+  /** Stability after forgetting (lapse)
+   *  S'_f(D,S,R) = w11 * D^-w12 * ((S+1)^w13 - 1) * e^(w14*(1-R))
+   *  Clamped so S'_f <= S
+   */
+  function stabilityAfterForgetting(d, s, r) {
+    const sf = W[11]
+             * Math.pow(d, -W[12])
+             * (Math.pow(s + 1, W[13]) - 1)
+             * Math.exp(W[14] * (1 - r));
+    return Math.max(0.1, Math.min(sf, s));
+  }
+
+  /* ─── SPEED → GRADE MAPPING ────────────────────────
+     Maps solve time (in seconds) to an FSRS grade.
+     The idea: faster solve ⇒ easier ⇒ higher grade.
+     We define benchmark times per problem "feel":
+       ≤ 5 min  → Easy  (4)
+       ≤ 15 min → Good  (3)
+       ≤ 30 min → Hard  (2)
+       > 30 min → Again (1) — too slow
+     Failed always maps to Again (1).
+  ──────────────────────────────────────────────────── */
+  function solveTimeToGrade(totalSeconds, failed) {
+    if (failed) return 1; // Again
+    if (totalSeconds <= 0) return 3; // default Good
+    if (totalSeconds <= 300)  return 4; // Easy
+    if (totalSeconds <= 900)  return 3; // Good
+    if (totalSeconds <= 1800) return 2; // Hard
+    return 1; // Again (extremely slow)
+  }
+
+  function gradeLabel(grade) {
+    return ['', 'Again', 'Hard', 'Good', 'Easy'][grade] || 'Unknown';
+  }
+
+
+  /* ─── DATA MODEL ───────────────────────────────────
+     Each problem stored as:
+     {
+       id:          string (uuid)
+       problemNum:  number
+       stability:   number  (S)
+       difficulty:  number  (D)
+       lapses:      number  (total fails)
+       reps:        number  (total reviews)
+       streak:      number  (consecutive successes)
+       lastReview:  ISO date string
+       nextReview:  ISO date string + time
+       lastGrade:   1-4
+       lastTime:    seconds
+       createdAt:   ISO date string
+     }
+     
+     Storage strategy:
+       1. localStorage as instant runtime cache
+       2. File System Access API for auto-save to a real .json file
+       3. IndexedDB to persist the file handle across reloads
+  ──────────────────────────────────────────────────── */
+  const STORAGE_KEY = 'leetcode-srs-problems';
+  const IDB_NAME = 'leetcode-srs-filehandles';
+  const IDB_STORE = 'handles';
+  const IDB_KEY = 'datafile';
+
+  // Currently connected file handle (File System Access API)
+  let fileHandle = null;
+  let autoSaveDebounceTimer = null;
+
+  function loadProblems() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    } catch { return []; }
+  }
+
+  function saveProblems(problems) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(problems));
+    autoSaveToFile();  // auto-save to connected file
+  }
+
+  function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  /* ─── IndexedDB: persist file handle ─────────────── */
+
+  function openIDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        req.result.createObjectStore(IDB_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveHandleToIDB(handle) {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(handle, IDB_KEY);
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function loadHandleFromIDB() {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function clearHandleFromIDB() {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(IDB_KEY);
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /* ─── File System Access API ─────────────────────── */
+
+  function hasFileSystemAccess() {
+    return 'showSaveFilePicker' in window;
+  }
+
+  async function connectFile() {
+    if (!hasFileSystemAccess()) {
+      showToast('Your browser does not support File System Access. Use Chrome or Edge.', '⚠️');
+      return;
+    }
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{
+          description: 'JSON Files',
+          accept: { 'application/json': ['.json'] }
+        }],
+        multiple: false
+      });
+      fileHandle = handle;
+      await saveHandleToIDB(handle);
+
+      // Load data from the file
+      await loadFromFile();
+      renderAll();
+      updateFileStatusUI();
+      showToast(`Connected to ${handle.name} — auto-save enabled`, '🔗');
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        showToast(`Error: ${err.message}`, '❌');
+      }
+    }
+  }
+
+  async function connectNewFile() {
+    if (!hasFileSystemAccess()) {
+      showToast('Your browser does not support File System Access. Use Chrome or Edge.', '⚠️');
+      return;
+    }
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: 'leetcode-srs-data.json',
+        types: [{
+          description: 'JSON Files',
+          accept: { 'application/json': ['.json'] }
+        }]
+      });
+      fileHandle = handle;
+      await saveHandleToIDB(handle);
+
+      // Save current data to the new file immediately
+      await writeToFile();
+      updateFileStatusUI();
+      showToast(`Created ${handle.name} — auto-save enabled`, '🔗');
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        showToast(`Error: ${err.message}`, '❌');
+      }
+    }
+  }
+
+  async function disconnectFile() {
+    fileHandle = null;
+    await clearHandleFromIDB();
+    updateFileStatusUI();
+    showToast('File disconnected — using localStorage only', '🔌');
+  }
+
+  async function loadFromFile() {
+    if (!fileHandle) return;
+    try {
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      if (!text.trim()) return; // empty file, keep current data
+
+      const data = JSON.parse(text);
+      let problems;
+
+      if (data.problems && Array.isArray(data.problems)) {
+        problems = data.problems;
+      } else if (Array.isArray(data)) {
+        problems = data;
+      } else {
+        return; // can't parse, keep current data
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(problems));
+    } catch (err) {
+      // File might be empty or invalid — that's OK, we'll write to it on next save
+      console.warn('Could not load from file:', err.message);
+    }
+  }
+
+  async function writeToFile() {
+    if (!fileHandle) return;
+    try {
+      // Verify we still have permission
+      const opts = { mode: 'readwrite' };
+      if ((await fileHandle.queryPermission(opts)) !== 'granted') {
+        if ((await fileHandle.requestPermission(opts)) !== 'granted') {
+          return;
+        }
+      }
+
+      const problems = loadProblems();
+      const exportData = {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        app: 'LeetCode SRS',
+        problemCount: problems.length,
+        problems: problems
+      };
+
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(exportData, null, 2));
+      await writable.close();
+
+      updateFileStatusUI();
+    } catch (err) {
+      console.error('Auto-save failed:', err);
+    }
+  }
+
+  function autoSaveToFile() {
+    if (!fileHandle) {
+      updateFileStatusUI();
+      return;
+    }
+    // Debounce: wait 300ms after last change before writing
+    clearTimeout(autoSaveDebounceTimer);
+    updateFileStatusSaving();
+    autoSaveDebounceTimer = setTimeout(async () => {
+      await writeToFile();
+    }, 300);
+  }
+
+  async function tryReconnectFile() {
+    if (!hasFileSystemAccess()) return;
+    try {
+      const handle = await loadHandleFromIDB();
+      if (!handle) return;
+
+      // Try to verify permission (will succeed without prompt if same origin)
+      const opts = { mode: 'readwrite' };
+      const perm = await handle.queryPermission(opts);
+      if (perm === 'granted') {
+        fileHandle = handle;
+        await loadFromFile();
+        renderAll();
+        updateFileStatusUI();
+        return;
+      }
+
+      // Store handle, show reconnect state — permission will be requested on first save
+      fileHandle = handle;
+      updateFileStatusUI('needs-permission');
+    } catch (err) {
+      console.warn('Could not reconnect to file:', err.message);
+    }
+  }
+
+  /* ─── File Status UI ────────────────────────────── */
+
+  function updateFileStatusUI(special) {
+    const dot = document.getElementById('sync-dot');
+    const label = document.getElementById('sync-label');
+    const nameEl = document.getElementById('file-status-name');
+    const connectBtn = document.getElementById('btn-file-connect');
+    const disconnectBtn = document.getElementById('btn-file-disconnect');
+
+    if (fileHandle) {
+      dot.className = 'sync-dot';
+      label.textContent = 'Auto-saving';
+      nameEl.textContent = fileHandle.name;
+      connectBtn.style.display = 'none';
+      disconnectBtn.style.display = '';
+
+      if (special === 'needs-permission') {
+        dot.className = 'sync-dot unsaved';
+        label.textContent = 'Click to reconnect';
+        connectBtn.style.display = '';
+        connectBtn.textContent = 'Reconnect';
+      }
+    } else {
+      dot.className = 'sync-dot disconnected';
+      label.textContent = 'No file connected';
+      nameEl.textContent = '';
+      connectBtn.style.display = '';
+      connectBtn.textContent = 'Connect File';
+      disconnectBtn.style.display = 'none';
+    }
+  }
+
+  function updateFileStatusSaving() {
+    const dot = document.getElementById('sync-dot');
+    const label = document.getElementById('sync-label');
+    dot.className = 'sync-dot unsaved';
+    label.textContent = 'Saving...';
+  }
+
+  /* ─── Manual Export (download fallback) ──────────── */
+
+  function exportToJsonFile() {
+    const problems = loadProblems();
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      app: 'LeetCode SRS',
+      problemCount: problems.length,
+      problems: problems
+    };
+
+    const json = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `leetcode-srs-${dateStr}.json`;
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast(`Downloaded ${problems.length} problems as ${filename}`, '💾');
+  }
+
+  /* ─── Import from JSON file ─────────────────────── */
+
+  function importFromJsonFile(file, mode) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = JSON.parse(e.target.result);
+          let importedProblems;
+
+          if (data.problems && Array.isArray(data.problems)) {
+            importedProblems = data.problems;
+          } else if (Array.isArray(data)) {
+            importedProblems = data;
+          } else {
+            reject(new Error('Invalid file format'));
+            return;
+          }
+
+          const requiredFields = ['id', 'stability', 'difficulty', 'nextReview'];
+          for (const p of importedProblems) {
+            for (const field of requiredFields) {
+              if (!(field in p)) {
+                reject(new Error(`Missing field "${field}"`));
+                return;
+              }
+            }
+          }
+
+          if (mode === 'replace') {
+            saveProblems(importedProblems);
+          } else {
+            const current = loadProblems();
+            const existingIds = new Set(current.map(p => p.id));
+            const existingNums = new Set(current.filter(p => p.problemNum).map(p => p.problemNum));
+            let added = 0;
+            for (const p of importedProblems) {
+              if (!existingIds.has(p.id) && !(p.problemNum && existingNums.has(p.problemNum))) {
+                current.push(p);
+                added++;
+              }
+            }
+            saveProblems(current);
+            resolve({ total: importedProblems.length, added, skipped: importedProblems.length - added });
+            return;
+          }
+
+          resolve({ total: importedProblems.length, added: importedProblems.length, skipped: 0 });
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    });
+  }
+
+  /** Parse "123" or "https://leetcode.com/problems/two-sum" → problem number or slug */
+  function parseProblemInput(input) {
+    input = input.trim();
+    // If it's just a number
+    if (/^\d+$/.test(input)) return { num: parseInt(input, 10), slug: null };
+    // Try to extract from URL
+    const m = input.match(/leetcode\.com\/problems\/([^/?#]+)/i);
+    if (m) return { num: null, slug: m[1] };
+    // try number anywhere
+    const n = input.match(/(\d+)/);
+    if (n) return { num: parseInt(n[1], 10), slug: null };
+    return null;
+  }
+
+  function problemDisplayName(p) {
+    if (p.problemNum) return `#${p.problemNum}`;
+    if (p.slug) return p.slug;
+    return '#?';
+  }
+
+  function problemUrl(p) {
+    if (p.problemNum) return `https://leetcode.com/problems/`;
+    if (p.slug) return `https://leetcode.com/problems/${p.slug}/`;
+    return null;
+  }
+
+  /* ─── CORE: Add / Update ───────────────────────── */
+
+  function addProblem(input, totalSeconds, failed) {
+    const parsed = parseProblemInput(input);
+    if (!parsed) return null;
+
+    const grade = solveTimeToGrade(totalSeconds, failed);
+    const now = new Date();
+
+    const s = initialStability(grade);
+    const d = initialDifficulty(grade);
+    const intervalDays = nextInterval(s, DESIRED_RETENTION);
+
+    const nextReviewDate = new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+    // Preserve same time-of-day for scheduled review
+    nextReviewDate.setHours(now.getHours(), now.getMinutes(), 0, 0);
+
+    const problem = {
+      id: generateId(),
+      problemNum: parsed.num,
+      slug: parsed.slug,
+      stability: s,
+      difficulty: d,
+      lapses: failed ? 1 : 0,
+      reps: 1,
+      streak: failed ? 0 : 1,
+      lastReview: now.toISOString(),
+      nextReview: nextReviewDate.toISOString(),
+      lastGrade: grade,
+      lastTime: totalSeconds,
+      createdAt: now.toISOString()
+    };
+
+    const problems = loadProblems();
+    problems.push(problem);
+    saveProblems(problems);
+    return problem;
+  }
+
+  function updateProblem(id, totalSeconds, failed) {
+    const problems = loadProblems();
+    const idx = problems.findIndex(p => p.id === id);
+    if (idx === -1) return null;
+
+    const p = problems[idx];
+    const now = new Date();
+    const grade = solveTimeToGrade(totalSeconds, failed);
+
+    // Calculate elapsed days since last review
+    const lastReviewDate = new Date(p.lastReview);
+    const elapsedDays = Math.max(0.01, (now - lastReviewDate) / (1000 * 60 * 60 * 24));
+
+    // Current retrievability
+    const r = retrievability(elapsedDays, p.stability);
+
+    // Update difficulty
+    const newD = nextDifficulty(p.difficulty, grade);
+
+    // Update stability
+    let newS;
+    if (grade === 1) {
+      // Forgot / failed
+      newS = stabilityAfterForgetting(newD, p.stability, r);
+    } else {
+      // Successful recall
+      newS = stabilityAfterRecall(newD, p.stability, r, grade);
+    }
+
+    // Calculate next interval
+    const intervalDays = nextInterval(newS, DESIRED_RETENTION);
+    const nextReviewDate = new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+    nextReviewDate.setHours(now.getHours(), now.getMinutes(), 0, 0);
+
+    // Update the problem
+    p.stability = newS;
+    p.difficulty = newD;
+    p.lapses = grade === 1 ? p.lapses + 1 : p.lapses;
+    p.reps += 1;
+    p.streak = grade === 1 ? 0 : p.streak + 1;
+    p.lastReview = now.toISOString();
+    p.nextReview = nextReviewDate.toISOString();
+    p.lastGrade = grade;
+    p.lastTime = totalSeconds;
+
+    problems[idx] = p;
+    saveProblems(problems);
+    return p;
+  }
+
+  function deleteProblem(id) {
+    const problems = loadProblems().filter(p => p.id !== id);
+    saveProblems(problems);
+  }
+
+
+  /* ─── RENDERING ────────────────────────────────── */
+
+  function isToday(dateStr) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear()
+        && d.getMonth()    === now.getMonth()
+        && d.getDate()     === now.getDate();
+  }
+
+  function isPast(dateStr) {
+    return new Date(dateStr) <= new Date();
+  }
+
+  function isDueToday(dateStr) {
+    return isToday(dateStr) || isPast(dateStr);
+  }
+
+  function formatTime(dateStr) {
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDate(dateStr) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.ceil((d - now) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays <= 7) return `In ${diffDays} days`;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
+  function formatSolveTime(totalSeconds) {
+    if (!totalSeconds || totalSeconds <= 0) return '—';
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    if (m === 0) return `${s}s`;
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  }
+
+  function renderTaskCard(p, isdue) {
+    const name = problemDisplayName(p);
+    const url = problemUrl(p);
+    const nameHtml = url
+      ? `<a href="${url}" target="_blank" rel="noopener">${name}</a>`
+      : name;
+
+    return `
+      <div class="task-card" data-id="${p.id}" style="animation-delay:${Math.random()*0.15}s">
+        <div class="task-num">${nameHtml}</div>
+        <div class="task-details">
+          <div class="task-meta">
+            ${isdue ? `<span class="badge due-badge">⏰ ${formatTime(p.nextReview)}</span>` : `<span class="badge due-badge">📅 ${formatDate(p.nextReview)}</span>`}
+            <span class="badge time-badge">⚡ ${formatSolveTime(p.lastTime)}</span>
+            <span class="badge ${p.lastGrade === 1 ? 'fail-badge' : 'streak-badge'}">${p.lastGrade === 1 ? '✗ ' + gradeLabel(p.lastGrade) : '🔥 ' + p.streak}</span>
+            <span class="badge stability-badge">S: ${p.stability.toFixed(1)}d</span>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="btn-update" data-id="${p.id}">${isdue ? 'Update' : 'Resolve'}</button>
+          <button class="btn-delete" data-id="${p.id}" title="Delete problem">✕</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAll() {
+    const problems = loadProblems();
+
+    // Split into today vs upcoming
+    const todayProblems = problems.filter(p => isDueToday(p.nextReview));
+    const upcomingProblems = problems.filter(p => !isDueToday(p.nextReview));
+
+    // Sort today by scheduled time
+    todayProblems.sort((a, b) => new Date(a.nextReview) - new Date(b.nextReview));
+    // Sort upcoming by next review date
+    upcomingProblems.sort((a, b) => new Date(a.nextReview) - new Date(b.nextReview));
+
+    const todayEl = document.getElementById('today-tasks');
+    const upcomingEl = document.getElementById('upcoming-tasks');
+
+    if (todayProblems.length === 0) {
+      todayEl.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🎯</div>
+        <p>No problems due today.<br/>Add new problems or wait for scheduled reviews.</p>
+      </div>`;
+    } else {
+      todayEl.innerHTML = todayProblems.map(p => renderTaskCard(p, true)).join('');
+    }
+
+    if (upcomingProblems.length === 0) {
+      upcomingEl.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🌙</div>
+        <p>No upcoming reviews scheduled.</p>
+      </div>`;
+    } else {
+      upcomingEl.innerHTML = upcomingProblems.map(p => renderTaskCard(p, false)).join('');
+    }
+
+    // Stats
+    document.getElementById('stat-due').textContent = todayProblems.length;
+    document.getElementById('stat-total').textContent = problems.length;
+    document.getElementById('stat-mastered').textContent = problems.filter(p => p.stability >= 21).length;
+    document.getElementById('stat-streak').textContent = problems.reduce((max, p) => Math.max(max, p.streak), 0);
+    document.getElementById('today-count').textContent = todayProblems.length > 0 ? `(${todayProblems.length})` : '';
+    document.getElementById('upcoming-count').textContent = upcomingProblems.length > 0 ? `(${upcomingProblems.length})` : '';
+
+    // Bind update buttons
+    document.querySelectorAll('.btn-update').forEach(btn => {
+      btn.addEventListener('click', () => openUpdateModal(btn.dataset.id));
+    });
+    document.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    });
+  }
+
+  /* ─── TOAST ──────────────────────────────────────── */
+  function showToast(message, icon = '✓') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `<span>${icon}</span> ${message}`;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  /* ─── MODAL HELPERS ──────────────────────────────── */
+  function openModal(id) {
+    document.getElementById(id).classList.add('active');
+  }
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+  }
+
+  /* ─── ADD MODAL ────────────────────────────────── */
+  let addFailed = false;
+
+  document.getElementById('btn-add-problem').addEventListener('click', () => {
+    addFailed = false;
+    resetToggle('add', false);
+    document.getElementById('form-add').reset();
+    document.getElementById('time-section-add').style.display = '';
+    openModal('modal-add');
+    document.getElementById('input-problem').focus();
+  });
+
+  document.getElementById('btn-cancel-add').addEventListener('click', () => closeModal('modal-add'));
+  document.getElementById('modal-add').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-add');
+  });
+
+  function resetToggle(ctx, failed) {
+    const solvedBtn = document.getElementById(`toggle-solved-${ctx}`);
+    const failedBtn = document.getElementById(`toggle-failed-${ctx}`);
+    solvedBtn.className = 'toggle-btn' + (failed ? '' : ' active-solved');
+    failedBtn.className = 'toggle-btn' + (failed ? ' active-failed' : '');
+  }
+
+  // Toggle buttons
+  ['add', 'update'].forEach(ctx => {
+    document.getElementById(`toggle-solved-${ctx}`).addEventListener('click', () => {
+      if (ctx === 'add') addFailed = false;
+      else updateFailed = false;
+      resetToggle(ctx, false);
+      document.getElementById(`time-section-${ctx}`).style.display = '';
+    });
+    document.getElementById(`toggle-failed-${ctx}`).addEventListener('click', () => {
+      if (ctx === 'add') addFailed = true;
+      else updateFailed = true;
+      resetToggle(ctx, true);
+      document.getElementById(`time-section-${ctx}`).style.display = 'none';
+    });
+  });
+
+  document.getElementById('form-add').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = document.getElementById('input-problem').value;
+    const mins = parseInt(document.getElementById('input-minutes').value) || 0;
+    const secs = parseInt(document.getElementById('input-seconds').value) || 0;
+    const totalSeconds = addFailed ? 0 : (mins * 60 + secs);
+
+    const p = addProblem(input, totalSeconds, addFailed);
+    if (!p) {
+      showToast('Invalid problem input', '⚠️');
+      return;
+    }
+
+    closeModal('modal-add');
+    renderAll();
+
+    const intervalDays = nextInterval(p.stability, DESIRED_RETENTION);
+    showToast(`${problemDisplayName(p)} scheduled — next review in ${intervalDays} day${intervalDays !== 1 ? 's' : ''}`, '📅');
+  });
+
+  /* ─── UPDATE MODAL ─────────────────────────────── */
+  let updateFailed = false;
+
+  function openUpdateModal(id) {
+    const problems = loadProblems();
+    const p = problems.find(x => x.id === id);
+    if (!p) return;
+
+    updateFailed = false;
+    resetToggle('update', false);
+    document.getElementById('update-id').value = id;
+    document.getElementById('update-problem-display').textContent = problemDisplayName(p);
+    document.getElementById('update-minutes').value = '';
+    document.getElementById('update-seconds').value = '';
+    document.getElementById('time-section-update').style.display = '';
+    openModal('modal-update');
+    document.getElementById('update-minutes').focus();
+  }
+
+  document.getElementById('btn-cancel-update').addEventListener('click', () => closeModal('modal-update'));
+  document.getElementById('modal-update').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-update');
+  });
+
+  document.getElementById('form-update').addEventListener('submit', e => {
+    e.preventDefault();
+    const id = document.getElementById('update-id').value;
+    const mins = parseInt(document.getElementById('update-minutes').value) || 0;
+    const secs = parseInt(document.getElementById('update-seconds').value) || 0;
+    const totalSeconds = updateFailed ? 0 : (mins * 60 + secs);
+
+    const p = updateProblem(id, totalSeconds, updateFailed);
+    if (!p) {
+      showToast('Error updating problem', '⚠️');
+      return;
+    }
+
+    closeModal('modal-update');
+    renderAll();
+
+    const intervalDays = nextInterval(p.stability, DESIRED_RETENTION);
+    showToast(`${problemDisplayName(p)} rescheduled — ${gradeLabel(p.lastGrade)} → ${intervalDays}d`, p.lastGrade === 1 ? '🔄' : '✅');
+  });
+
+  /* ─── DELETE MODAL ─────────────────────────────── */
+  function openDeleteModal(id) {
+    document.getElementById('delete-id').value = id;
+    openModal('modal-delete');
+  }
+
+  document.getElementById('btn-confirm-cancel-delete').addEventListener('click', () => closeModal('modal-delete'));
+  document.getElementById('modal-delete').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-delete');
+  });
+
+  document.getElementById('btn-confirm-delete').addEventListener('click', () => {
+    const id = document.getElementById('delete-id').value;
+    deleteProblem(id);
+    closeModal('modal-delete');
+    renderAll();
+    showToast('Problem removed', '🗑️');
+  });
+
+  /* ─── FILE CONNECT / DISCONNECT ──────────────────── */
+  document.getElementById('btn-file-connect').addEventListener('click', async () => {
+    // If we have a handle that needs permission, request it
+    if (fileHandle) {
+      try {
+        const perm = await fileHandle.requestPermission({ mode: 'readwrite' });
+        if (perm === 'granted') {
+          await loadFromFile();
+          renderAll();
+          updateFileStatusUI();
+          showToast(`Reconnected to ${fileHandle.name}`, '🔗');
+          return;
+        }
+      } catch (err) {
+        // Fall through to picker
+      }
+    }
+    // Show choice: open existing or create new
+    openModal('modal-file-choice');
+  });
+
+  document.getElementById('btn-file-disconnect').addEventListener('click', disconnectFile);
+
+  /* ─── EXPORT / IMPORT ──────────────────────────── */
+  document.getElementById('btn-export').addEventListener('click', exportToJsonFile);
+
+  // Import modal
+  let importFile = null;
+  let importMode = 'replace';
+
+  document.getElementById('btn-import').addEventListener('click', () => {
+    importFile = null;
+    importMode = 'replace';
+    document.getElementById('import-mode-replace').classList.add('selected');
+    document.getElementById('import-mode-merge').classList.remove('selected');
+    document.getElementById('btn-submit-import').disabled = true;
+    const dz = document.getElementById('drop-zone');
+    dz.innerHTML = `<div class="drop-icon">📄</div><div class="drop-text">Drop a JSON file here or click to browse</div><div class="drop-sub">Accepts .json files exported from this app</div>`;
+    document.getElementById('file-input').value = '';
+    openModal('modal-import');
+  });
+
+  document.getElementById('btn-cancel-import').addEventListener('click', () => closeModal('modal-import'));
+  document.getElementById('modal-import').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-import');
+  });
+
+  // Import mode toggles
+  document.getElementById('import-mode-replace').addEventListener('click', () => {
+    importMode = 'replace';
+    document.getElementById('import-mode-replace').classList.add('selected');
+    document.getElementById('import-mode-merge').classList.remove('selected');
+  });
+  document.getElementById('import-mode-merge').addEventListener('click', () => {
+    importMode = 'merge';
+    document.getElementById('import-mode-merge').classList.add('selected');
+    document.getElementById('import-mode-replace').classList.remove('selected');
+  });
+
+  // Drop zone
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('drag-over');
+  });
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.endsWith('.json')) {
+      selectImportFile(file);
+    } else {
+      showToast('Please drop a .json file', '⚠️');
+    }
+  });
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) selectImportFile(e.target.files[0]);
+  });
+
+  function selectImportFile(file) {
+    importFile = file;
+    const dz = document.getElementById('drop-zone');
+    dz.innerHTML = `<div class="drop-icon">✅</div><div class="file-selected">${file.name}</div><div class="drop-sub">${(file.size / 1024).toFixed(1)} KB — Click to change file</div>`;
+    document.getElementById('btn-submit-import').disabled = false;
+  }
+
+  document.getElementById('btn-submit-import').addEventListener('click', async () => {
+    if (!importFile) return;
+    const btn = document.getElementById('btn-submit-import');
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+
+    try {
+      const result = await importFromJsonFile(importFile, importMode);
+      closeModal('modal-import');
+      renderAll();
+      if (importMode === 'merge') {
+        showToast(`Merged: ${result.added} added, ${result.skipped} skipped`, '🔀');
+      } else {
+        showToast(`Imported ${result.total} problems from ${importFile.name}`, '📂');
+      }
+    } catch (err) {
+      showToast(`Import error: ${err.message}`, '❌');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Import Data';
+    }
+  });
+
+  /* ─── FILE CHOICE MODAL ───────────────────────── */
+  document.getElementById('btn-file-open-existing').addEventListener('click', async () => {
+    closeModal('modal-file-choice');
+    await connectFile();
+  });
+  document.getElementById('btn-file-create-new').addEventListener('click', async () => {
+    closeModal('modal-file-choice');
+    await connectNewFile();
+  });
+  document.getElementById('btn-cancel-file-choice').addEventListener('click', () => closeModal('modal-file-choice'));
+  document.getElementById('modal-file-choice').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-file-choice');
+  });
+
+  /* ─── KEYBOARD ─────────────────────────────────── */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeModal('modal-add');
+      closeModal('modal-update');
+      closeModal('modal-delete');
+      closeModal('modal-import');
+      closeModal('modal-file-choice');
+    }
+  });
+
+  /* ─── INIT ─────────────────────────────────────── */
+  renderAll();
+  updateFileStatusUI();
+  tryReconnectFile();
+
+})();
+</script>
+
+</body>
+</html>
