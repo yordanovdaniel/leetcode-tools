@@ -12,6 +12,8 @@ This workspace contains:
 ```text
 leetcode-tools/
   README.md
+  LICENSE
+  .gitignore
   leetcode-cleaner/
     content.js
     manifest.json
@@ -20,7 +22,6 @@ leetcode-tools/
     icons/
   leetcode-tracker/
     index.html
-    leetcode-srs-2026-04-04.json
 ```
 
 ## 1) leetcode-cleaner (Chrome Extension)
@@ -55,7 +56,7 @@ Automatically clicks LeetCode editor reset on new problem pages, confirms reset 
 
 ## 2) leetcode-tracker (FSRS Scheduler)
 
-Single-page app for review scheduling and progress tracking.
+Single-page app for review scheduling and progress tracking. [URL](https://yordanovdaniel.github.io/leetcode-tools/)
 
 ### Features
 
@@ -72,7 +73,7 @@ Single-page app for review scheduling and progress tracking.
 
 No build step required.
 
-1. Open `leetcode-tracker/index.html` in a Chromium browser.
+1. Open [URL](https://yordanovdaniel.github.io/leetcode-tools/) in a Chromium browser.
 2. Start adding and updating problems.
 
 For full auto-save/reconnect support, use Chrome or Edge (File System Access API required).
@@ -107,21 +108,6 @@ Exported JSON shape:
 }
 ```
 
-## Quick Review Notes
-
-Current workspace is functional and organized for local usage. A few practical notes:
-
-- `leetcode-cleaner` relies on some brittle page selectors, so occasional updates may be needed when LeetCode UI changes.
-- In `leetcode-tracker`, numeric problems currently link to the generic problems page (`https://leetcode.com/problems/`) rather than a specific problem URL.
-- `leetcode-tracker` is a single-file app (`index.html`) with inlined CSS/JS, which is simple to run but harder to maintain at scale.
-
-## Future Improvements
-
-- Add a small test harness for the scheduling functions.
-- Split tracker HTML/CSS/JS into separate files.
-- Add optional backup cadence/history for JSON auto-save.
-- Add a short troubleshooting section for selector breakage in `leetcode-cleaner`.
-
 ## License
 
-No license file is currently present. Add a `LICENSE` file if you plan to publish this repository publicly.
+MIT — see [LICENSE](LICENSE).

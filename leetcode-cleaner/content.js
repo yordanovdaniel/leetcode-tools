@@ -102,12 +102,28 @@
       confirmBtn.click();
       console.log('[LeetCode Cleaner] ✅ Code has been reset!');
 
-      // Now start the stopwatch natively
+      // Now start the stopwatch natively.
+      // The timer widget requires two clicks: first to reset the timer to 00:00,
+      // then to start it. Between clicks, React may re-render the button, so we
+      // re-query the DOM after each click.
       await new Promise(r => setTimeout(r, 600)); // wait for confirm modal to close
       
       try {
         console.log('[LeetCode Cleaner] Opening timer menu...');
-        const timerMenuBtn = document.querySelector("#__next > div.flex.min-w-\\[360px\\].flex-col.text-label-1.dark\\:text-dark-label-1.overflow-x-auto.bg-sd-background-gray.h-\\[100vh\\] > div > div > div.relative > nav > div.relative.flex.flex-1.items-center.justify-end > div.relative.flex.items-center.justify-end.gap-2 > div.flex.flex-none > div.h-8.rounded-sd.bg-fill-tertiary.rounded-r-none > div > div:nth-child(1) > div > div.flex.h-full.cursor-pointer.rounded-sd-sm.p-1.hover\\:bg-sd-accent > div");
+
+        // Primary selector for timer menu button
+        const TIMER_MENU_SELECTOR = "#__next > div.flex.min-w-\\[360px\\].flex-col.text-label-1.dark\\:text-dark-label-1.overflow-x-auto.bg-sd-background-gray.h-\\[100vh\\] > div > div > div.relative > nav > div.relative.flex.flex-1.items-center.justify-end > div.relative.flex.items-center.justify-end.gap-2 > div.flex.flex-none > div.h-8.rounded-sd.bg-fill-tertiary.rounded-r-none > div > div:nth-child(1) > div > div.flex.h-full.cursor-pointer.rounded-sd-sm.p-1.hover\\:bg-sd-accent > div";
+
+        // Try primary selector, then fall back to scanning for timer-like buttons
+        let timerMenuBtn = document.querySelector(TIMER_MENU_SELECTOR);
+        if (!timerMenuBtn) {
+          // Fallback: look for clickable elements near a timer display (digits like "00:00")
+          const allEls = document.querySelectorAll('[class*="timer"], [class*="stopwatch"], [aria-label*="timer" i], [aria-label*="stopwatch" i]');
+          for (const el of allEls) {
+            const clickable = el.closest('button, [role="button"], [class*="cursor-pointer"]') || el.querySelector('button, [role="button"], [class*="cursor-pointer"]');
+            if (clickable) { timerMenuBtn = clickable; break; }
+          }
+        }
         
         if (timerMenuBtn) {
           timerMenuBtn.click();
@@ -115,20 +131,51 @@
           await new Promise(r => setTimeout(r, 400)); // wait for dropdown
           console.log('[LeetCode Cleaner] Clicking timer action...');
           
-          // Radix UI generates random IDs like radix-:r2: or radix-_r_f_, so we fuzzy match the beginning
+          // Primary selector for timer action button (Radix UI generates random IDs)
           let actionBtn = document.querySelector('[id^="radix-"] > div > div.relative.h-8.w-full > div > button');
           
+          // Fallback: look for a button with start/reset text in any open dropdown/popover
+          if (!actionBtn) {
+            const dropdowns = document.querySelectorAll('[id^="radix-"], [role="menu"], [role="listbox"], [class*="popover"], [class*="dropdown"]');
+            for (const dd of dropdowns) {
+              const buttons = dd.querySelectorAll('button');
+              for (const b of buttons) {
+                const text = (b.textContent || '').toLowerCase();
+                if (text.includes('start') || text.includes('reset') || text.includes('restart')) {
+                  actionBtn = b;
+                  break;
+                }
+              }
+              if (actionBtn) break;
+            }
+          }
+
           if (actionBtn) {
             actionBtn.click();
             
             // Wait for React to process the first click
             await new Promise(r => setTimeout(r, 300));
             
-            // React might have destroyed and recreated the button after the 1st click,
+            // React may have destroyed and recreated the button after the 1st click,
             // so we must query the document again to get the fresh element!
             actionBtn = document.querySelector('[id^="radix-"] > div > div.relative.h-8.w-full > div > button');
+            if (!actionBtn) {
+              // Repeat fallback scan
+              const dropdowns = document.querySelectorAll('[id^="radix-"], [role="menu"], [role="listbox"], [class*="popover"], [class*="dropdown"]');
+              for (const dd of dropdowns) {
+                const buttons = dd.querySelectorAll('button');
+                for (const b of buttons) {
+                  const text = (b.textContent || '').toLowerCase();
+                  if (text.includes('start') || text.includes('reset') || text.includes('restart')) {
+                    actionBtn = b;
+                    break;
+                  }
+                }
+                if (actionBtn) break;
+              }
+            }
             if (actionBtn) {
-              actionBtn.click(); // User requested 2 clicks (one to reset, one to start)
+              actionBtn.click();
               console.log('[LeetCode Cleaner] ✅ Timer started!');
             }
           }

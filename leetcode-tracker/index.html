@@ -1162,6 +1162,13 @@
     return ['', 'Again', 'Hard', 'Good', 'Easy'][grade] || 'Unknown';
   }
 
+  /** Escape HTML special characters to prevent XSS */
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
 
   /* ─── DATA MODEL ───────────────────────────────────
      Each problem stored as:
@@ -1549,14 +1556,13 @@
   }
 
   function problemDisplayName(p) {
-    if (p.problemNum) return `#${p.problemNum}`;
     if (p.slug) return p.slug;
+    if (p.problemNum) return `#${p.problemNum}`;
     return '#?';
   }
 
   function problemUrl(p) {
-    if (p.problemNum) return `https://leetcode.com/problems/`;
-    if (p.slug) return `https://leetcode.com/problems/${p.slug}/`;
+    if (p.slug) return `https://leetcode.com/problems/${encodeURIComponent(p.slug)}/`;
     return null;
   }
 
@@ -1565,6 +1571,13 @@
   function addProblem(input, totalSeconds, failed) {
     const parsed = parseProblemInput(input);
     if (!parsed) return null;
+
+    // Check for duplicate slug
+    const problems = loadProblems();
+    if (parsed.slug) {
+      const existing = problems.find(p => p.slug === parsed.slug);
+      if (existing) return { duplicate: true, problem: existing };
+    }
 
     const grade = solveTimeToGrade(totalSeconds, failed);
     const now = new Date();
@@ -1593,7 +1606,6 @@
       createdAt: now.toISOString()
     };
 
-    const problems = loadProblems();
     problems.push(problem);
     saveProblems(problems);
     return problem;
@@ -1697,26 +1709,27 @@
   }
 
   function renderTaskCard(p, isdue) {
-    const name = problemDisplayName(p);
+    const name = escapeHtml(problemDisplayName(p));
     const url = problemUrl(p);
+    const safeId = escapeHtml(p.id);
     const nameHtml = url
-      ? `<a href="${url}" target="_blank" rel="noopener">${name}</a>`
+      ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${name}</a>`
       : name;
 
     return `
-      <div class="task-card" data-id="${p.id}" style="animation-delay:${Math.random()*0.15}s">
+      <div class="task-card" data-id="${safeId}">
         <div class="task-num">${nameHtml}</div>
         <div class="task-details">
           <div class="task-meta">
-            ${isdue ? `<span class="badge due-badge">⏰ ${formatTime(p.nextReview)}</span>` : `<span class="badge due-badge">📅 ${formatDate(p.nextReview)}</span>`}
-            <span class="badge time-badge">⚡ ${formatSolveTime(p.lastTime)}</span>
-            <span class="badge ${p.lastGrade === 1 ? 'fail-badge' : 'streak-badge'}">${p.lastGrade === 1 ? '✗ ' + gradeLabel(p.lastGrade) : '🔥 ' + p.streak}</span>
+            ${isdue ? `<span class="badge due-badge">⏰ ${escapeHtml(formatTime(p.nextReview))}</span>` : `<span class="badge due-badge">📅 ${escapeHtml(formatDate(p.nextReview))}</span>`}
+            <span class="badge time-badge">⚡ ${escapeHtml(formatSolveTime(p.lastTime))}</span>
+            <span class="badge ${p.lastGrade === 1 ? 'fail-badge' : 'streak-badge'}">${p.lastGrade === 1 ? '✗ ' + escapeHtml(gradeLabel(p.lastGrade)) : '🔥 ' + p.streak}</span>
             <span class="badge stability-badge">S: ${p.stability.toFixed(1)}d</span>
           </div>
         </div>
         <div class="task-actions">
-          <button class="btn-update" data-id="${p.id}">${isdue ? 'Update' : 'Resolve'}</button>
-          <button class="btn-delete" data-id="${p.id}" title="Delete problem">✕</button>
+          <button class="btn-update" data-id="${safeId}">${isdue ? 'Update' : 'Resolve'}</button>
+          <button class="btn-delete" data-id="${safeId}" title="Delete problem">✕</button>
         </div>
       </div>
     `;
@@ -1777,7 +1790,10 @@
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `<span>${icon}</span> ${message}`;
+    const iconSpan = document.createElement('span');
+    iconSpan.textContent = icon;
+    toast.appendChild(iconSpan);
+    toast.appendChild(document.createTextNode(' ' + message));
     container.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
   }
@@ -1837,17 +1853,21 @@
     const secs = parseInt(document.getElementById('input-seconds').value) || 0;
     const totalSeconds = addFailed ? 0 : (mins * 60 + secs);
 
-    const p = addProblem(input, totalSeconds, addFailed);
-    if (!p) {
+    const result = addProblem(input, totalSeconds, addFailed);
+    if (!result) {
       showToast('Invalid problem input', '⚠️');
+      return;
+    }
+    if (result.duplicate) {
+      showToast(`"${problemDisplayName(result.problem)}" already exists`, '⚠️');
       return;
     }
 
     closeModal('modal-add');
     renderAll();
 
-    const intervalDays = nextInterval(p.stability, DESIRED_RETENTION);
-    showToast(`${problemDisplayName(p)} scheduled — next review in ${intervalDays} day${intervalDays !== 1 ? 's' : ''}`, '📅');
+    const intervalDays = nextInterval(result.stability, DESIRED_RETENTION);
+    showToast(`${problemDisplayName(result)} scheduled — next review in ${intervalDays} day${intervalDays !== 1 ? 's' : ''}`, '📅');
   });
 
   /* ─── UPDATE MODAL ─────────────────────────────── */
