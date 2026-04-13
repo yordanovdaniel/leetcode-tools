@@ -880,9 +880,9 @@
     </div>
     <form id="form-add" autocomplete="off">
       <div class="form-group">
-        <label for="input-problem">Problem # or URL</label>
-        <input type="text" id="input-problem" placeholder="e.g.  1 or  https://leetcode.com/problems/two-sum" required />
-        <div class="form-note">Enter a LeetCode problem number or full URL</div>
+        <label for="input-problem">Problem Name or URL</label>
+        <input type="text" id="input-problem" placeholder="e.g. two-sum, or https://leetcode.com/problems/two-sum" required />
+        <div class="form-note">Enter a LeetCode problem name or URL</div>
       </div>
       <div class="toggle-group" id="toggle-status-add">
         <button type="button" class="toggle-btn active-solved" data-status="solved" id="toggle-solved-add">✓ Solved</button>
@@ -1537,17 +1537,14 @@
     });
   }
 
-  /** Parse "123" or "https://leetcode.com/problems/two-sum" → problem number or slug */
+  /** Parse "two-sum", or "https://leetcode.com/problems/two-sum" → problem number or slug */
   function parseProblemInput(input) {
     input = input.trim();
-    // If it's just a number
-    if (/^\d+$/.test(input)) return { num: parseInt(input, 10), slug: null };
-    // Try to extract from URL
-    const m = input.match(/leetcode\.com\/problems\/([^/?#]+)/i);
+    // Try to extract from URL or problems/ path
+    const m = input.match(/problems\/([^/?#]+)/i);
     if (m) return { num: null, slug: m[1] };
-    // try number anywhere
-    const n = input.match(/(\d+)/);
-    if (n) return { num: parseInt(n[1], 10), slug: null };
+    // If it's a valid slug format (no spaces/slashes)
+    if (/^[a-zA-Z0-9_-]+$/.test(input)) return { num: null, slug: input };
     return null;
   }
 
